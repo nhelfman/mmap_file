@@ -6,10 +6,16 @@
 #define BUF_SIZE 1024*64
 #define VIEW_SIZE BUF_SIZE / 2
 
+// pointer to view on mapped view
+LPVOID lpView = __nullptr;
+
+// type for defining based pointers 
+typedef char __based(lpView) *pBasedPtr; 
+
 struct Foo
 {
     bool BarBool;
-    char* BarString;
+    pBasedPtr BarString;
     int BarInt;
 };
 
@@ -19,7 +25,7 @@ void printFoo(Foo* p)
         << "Foo = \n"
         << "{\n"
         << "\tBarBool = " << p->BarBool << ";\n"
-        << "\tBarString = " << p->BarString << ";\n"
+        << "\tBarString = " << (char*)p->BarString << ";\n"
         << "\tBarInt = 0x" << std::hex << p->BarInt << ";\n"
         << "}\n";
 }
@@ -31,7 +37,6 @@ int main(int argc, char* argv[])
 
     if (argc > 1 && std::string(argv[1]) == "-r") 
     {
-        std::cout << "Restore heap from file\n" ;
         restore = true;
     }
 
@@ -65,7 +70,7 @@ int main(int argc, char* argv[])
     }
 
     // Map a view of the file into the address space
-    LPVOID lpView = MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, 0, 0, VIEW_SIZE);
+    lpView = MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, 0, 0, VIEW_SIZE);
     if (lpView == NULL)
     {
         std::cerr << "MapViewOfFile failed: " << GetLastError() << std::endl;
@@ -76,46 +81,34 @@ int main(int argc, char* argv[])
 
     if (restore)
     {
+        std::cout << "Restore heap from file\n";
+
         LPVOID current = lpView;
-
-        // read the base address
-        long base = *reinterpret_cast<long*>(current);
-
-        // save base address as first item
-        *(long*)current = (long)current;
-
-        current = (LPVOID)((char*)lpView + sizeof(LPVOID));
 
         // load the structure from memory
         Foo* p = (Foo*)current;
-        int barStringOffset = (long)p->BarString - base;
-        p->BarString =  (char*)lpView + barStringOffset;
-
-        std::cout
-            << "lpView: " << std::addressof(lpView) << "\n"
-            << "barStringOffset: " << barStringOffset << "\n\n";
+        std::cout << "lpView: " << std::addressof(lpView) << "\n";
 
         printFoo(p);
     }
     else 
     {
-        std::cout << "Mapping structure to mmap file\n\n";
+        std::cout << "Mapping structure to mmap file\n";
+        std::cout << "lpView: " << std::addressof(lpView) << "\n\n";
 
         // save base address as first item
         LPVOID current = lpView;
-        *(long*)current = (long)current;
-
-        current = (LPVOID)((char*)lpView + sizeof(LPVOID));
-
+       
         // save structure content
         Foo* p = (Foo*)current;
         p->BarBool = true;
         p->BarInt = 0x12345678;
 
-        current = (LPVOID)((char*)current + sizeof(Foo));
+        int strOffset = sizeof(Foo);
+        current = (LPVOID)((char*)current + strOffset);
 
         CopyMemory(current, "Hello world!", 12);
-        p->BarString = (char*)current;
+        p->BarString = (pBasedPtr)strOffset;
 
         printFoo(p);
     }
