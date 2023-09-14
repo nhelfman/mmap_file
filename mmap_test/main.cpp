@@ -6,14 +6,32 @@
 #define BUF_SIZE 1024*64
 #define VIEW_SIZE BUF_SIZE / 2
 
+struct Foo
+{
+    bool BarBool;
+    char* BarString;
+    int BarInt;
+};
+
+void printFoo(Foo* p)
+{
+    std::cout
+        << "Foo = \n"
+        << "{\n"
+        << "\tBarBool = " << p->BarBool << ";\n"
+        << "\tBarString = " << p->BarString << ";\n"
+        << "\tBarInt = 0x" << std::hex << p->BarInt << ";\n"
+        << "}\n";
+}
+
 int main(int argc, char* argv[])
 {
-    std::cout << "Hello MMF!\n";
+    std::cout << "Starting\n";
     bool restore = false;
 
     if (argc > 1 && std::string(argv[1]) == "-r") 
     {
-        std::cout << "restore heap\n";
+        std::cout << "Restore heap from file\n" ;
         restore = true;
     }
 
@@ -56,14 +74,6 @@ int main(int argc, char* argv[])
         return 3;
     }
 
-    // Access the committed page as a normal pointer
-    struct Foo
-    {
-        bool BarBool;
-        char* BarString;
-        int BarInt;
-    };
-
     if (restore)
     {
         LPVOID current = lpView;
@@ -76,22 +86,21 @@ int main(int argc, char* argv[])
 
         current = (LPVOID)((char*)lpView + sizeof(LPVOID));
 
-        // load the structure
+        // load the structure from memory
         Foo* p = (Foo*)current;
         int barStringOffset = (long)p->BarString - base;
         p->BarString =  (char*)lpView + barStringOffset;
 
         std::cout
             << "lpView: " << std::addressof(lpView) << "\n"
-            << "barStringOffset: " << barStringOffset << "\n";
+            << "barStringOffset: " << barStringOffset << "\n\n";
 
-        std::cout 
-            << p->BarBool << ", "
-            << "0x" << std::hex << p->BarInt << ", "
-            << p->BarString << std::endl;
+        printFoo(p);
     }
     else 
     {
+        std::cout << "Mapping structure to mmap file\n\n";
+
         // save base address as first item
         LPVOID current = lpView;
         *(long*)current = (long)current;
@@ -105,9 +114,10 @@ int main(int argc, char* argv[])
 
         current = (LPVOID)((char*)current + sizeof(Foo));
 
-        //void* pBarString = (char*)lpView + sizeof(Foo);
         CopyMemory(current, "Hello world!", 12);
         p->BarString = (char*)current;
+
+        printFoo(p);
     }
 
     UnmapViewOfFile(lpView);
@@ -116,4 +126,6 @@ int main(int argc, char* argv[])
 
     return 0;
 }
+
+
 
